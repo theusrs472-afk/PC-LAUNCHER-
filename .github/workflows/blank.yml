@@ -1,131 +1,180 @@
-name: PC criado pelo @alves7.pcm
-
+name: RDP
 on:
   workflow_dispatch:
-    inputs:
-      instance_number:
-        description: 'Instance Number (1-10)'
-        required: true
-        default: '1'
-        type: string
 
 jobs:
-  deploy-rdp:
+  secure-rdp:
     runs-on: windows-latest
     timeout-minutes: 360
-    
+
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
-      
-    - name: System Information
-      run: |
-        Write-Host "=== ENIGMANO RDP DEPLOYMENT ===" -ForegroundColor Green
-        Write-Host "Instance Number: ${{ github.event.inputs.instance_number }}" -ForegroundColor Yellow
-        Write-Host "Runner: $env:RUNNER_NAME" -ForegroundColor Yellow
-        Write-Host "Workflow: $env:GITHUB_WORKFLOW" -ForegroundColor Yellow
-        
-        Write-Host "`n=== SYSTEM SPECIFICATIONS ===" -ForegroundColor Cyan
-        Get-ComputerInfo | Select-Object WindowsProductName, WindowsVersion, TotalPhysicalMemory
-        Get-WmiObject -Class Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors
-        
-    - name: Enable RDP
-      run: |
-        Write-Host "Enabling Remote Desktop..." -ForegroundColor Green
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -name "fDenyTSConnections" -Value 0
-        Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-        Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -name "UserAuthentication" -Value 1
-        
-    - name: Create User Account
-      run: |
-        Write-Host "Setting up user account..." -ForegroundColor Green
-        $Password = ConvertTo-SecureString "P@ssw0rd!" -AsPlainText -Force
-        Set-LocalUser -Name "runneradmin" -Password $Password
-        Add-LocalGroupMember -Group "Remote Desktop Users" -Member "runneradmin"
-        Write-Host "Username: runneradmin" -ForegroundColor Yellow
-        Write-Host "Password: P@ssw0rd!" -ForegroundColor Yellow
-        
-    - name: Install Tailscale (Silent)
-      run: |
-        Write-Host "Downloading Tailscale..." -ForegroundColor Green
-        $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
-        $installerPath = "$env:TEMP\tailscale.msi"
-        Invoke-WebRequest -Uri $tsUrl -OutFile $installerPath
-        Write-Host "Installing Tailscale silently..." -ForegroundColor Green
-        Start-Process msiexec.exe -ArgumentList "/i `"$installerPath`" /quiet /norestart" -Wait
-        Remove-Item $installerPath -Force
-        Write-Host "Tailscale installed successfully!" -ForegroundColor Green
-        
-    - name: Start Tailscale
-      run: |
-        Write-Host "Starting Tailscale..." -ForegroundColor Green
-        & "C:\Program Files\Tailscale\tailscale.exe" up --authkey ${{ secrets.TAILSCALE_AUTH_KEY }} --hostname "enigmano-${{ github.run_id }}"
-        Start-Sleep -Seconds 15
-        
-    - name: Get Tailscale IP
-      run: |
-        $tsIP = & "C:\Program Files\Tailscale\tailscale.exe" ip -4
-        Write-Host "Tailscale IP: $tsIP" -ForegroundColor Green
-        echo "TAILSCALE_IP=$tsIP" >> $env:GITHUB_ENV
-        
-    - name: Install Google Chrome (Direct)
-      run: |
-        Write-Host "Downloading Google Chrome..." -ForegroundColor Green
-        $chromeUrl = "https://dl.google.com/chrome/install/latest/chrome_installer.exe"
-        $installerPath = "$env:TEMP\chrome_installer.exe"
-        Invoke-WebRequest -Uri $chromeUrl -OutFile $installerPath
-        Write-Host "Installing Google Chrome silently..." -ForegroundColor Green
-        Start-Process -FilePath $installerPath -ArgumentList "/silent /install" -Wait
-        Remove-Item $installerPath -Force
-        Write-Host "Google Chrome installed!" -ForegroundColor Green
-        
-    - name: Install 7-Zip (Direct)
-      run: |
-        Write-Host "Downloading 7-Zip..." -ForegroundColor Green
-        $zipUrl = "https://www.7-zip.org/a/7z2409-x64.exe"
-        $installerPath = "$env:TEMP\7z-installer.exe"
-        Invoke-WebRequest -Uri $zipUrl -OutFile $installerPath
-        Write-Host "Installing 7-Zip silently..." -ForegroundColor Green
-        Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait
-        Remove-Item $installerPath -Force
-        Write-Host "7-Zip installed!" -ForegroundColor Green
-        
-    - name: Connection Details
-      run: |
-        Write-Host "`n=== CONNECTION DETAILS (TAILSCALE) ===" -ForegroundColor Green
-        Write-Host "╔══════════════════════════════════════╗" -ForegroundColor Cyan
-        Write-Host "║         ENIGMANO RDP ACCESS          ║" -ForegroundColor Cyan  
-        Write-Host "╠══════════════════════════════════════╣" -ForegroundColor Cyan
-        Write-Host "║ Host: $env:TAILSCALE_IP              ║" -ForegroundColor White
-        Write-Host "║ Username: runneradmin                ║" -ForegroundColor White
-        Write-Host "║ Password: P@ssw0rd!                  ║" -ForegroundColor White
-        Write-Host "╚══════════════════════════════════════╝" -ForegroundColor Cyan
-        
-        Write-Host "`nConnection Instructions:" -ForegroundColor Yellow
-        Write-Host "1. Install Tailscale on your device (phone, tablet, Mac, Linux)" -ForegroundColor White
-        Write-Host "2. Log in with the same Tailscale account" -ForegroundColor White
-        Write-Host "3. Open Remote Desktop app and enter the IP above" -ForegroundColor White
-        Write-Host "4. Use the provided credentials" -ForegroundColor White
-        
-    - name: Keep Session Alive
-      run: |
-        Write-Host "`n=== SESSION ACTIVE ===" -ForegroundColor Green
-        Write-Host "EnigMano RDP instance is now running!" -ForegroundColor Cyan
-        Write-Host "Instance will remain active for up to 6 hours." -ForegroundColor Yellow
-        Write-Host "Do not close this window to maintain the connection." -ForegroundColor Red
-        
-        $counter = 0
-        while ($true) {
-          $counter++
-          Write-Host "Session active - Heartbeat #$counter ($(Get-Date))" -ForegroundColor Green
+      - name: Install Node, Python, Git
+        shell: pwsh
+        run: |
+          choco install nodejs-lts python git 7zip -y --no-progress
+          $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
+          node --version
+          npm --version
+          python --version
+          git --version
+
+      - name: Install OpenCode
+        shell: pwsh
+        run: |
+          $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
+          npm install -g opencode-ai@latest
+          $npmBin = (npm config get prefix).Trim()
+          $machinePath = [Environment]::GetEnvironmentVariable("Path","Machine")
+          if ($machinePath -notlike "*$npmBin*") {
+            [Environment]::SetEnvironmentVariable("Path", "$machinePath;$npmBin", "Machine")
+          }
+          $env:Path += ";$npmBin"
+          opencode --version
+
+      - name: Install Mesa3D (safe mode)
+        shell: pwsh
+        run: |
+          $ver = "24.3.4"
+          $url = "https://github.com/pal1000/mesa-dist-win/releases/download/$ver/mesa3d-$ver-release-msvc.7z"
+          Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\mesa3d.7z" -UseBasicParsing
+
+          $mesaDir = "C:\mesa3d"
+          New-Item -ItemType Directory -Force -Path $mesaDir | Out-Null
+          & "C:\Program Files\7-Zip\7z.exe" x "$env:TEMP\mesa3d.7z" -o"$mesaDir" -y | Out-Null
+
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "$env:TEMP\vc.exe" -UseBasicParsing
+          Start-Process "$env:TEMP\vc.exe" -ArgumentList "/quiet","/norestart" -Wait
+
+          $vars = @{
+            "GALLIUM_DRIVER"              = "llvmpipe"
+            "LP_NUM_THREADS"              = "$env:NUMBER_OF_PROCESSORS"
+            "MESA_GL_VERSION_OVERRIDE"    = "4.5COMPAT"
+            "MESA_GLSL_VERSION_OVERRIDE"  = "450"
+            "MESA_GLTHREAD"               = "true"
+          }
+          foreach ($k in $vars.Keys) {
+            [Environment]::SetEnvironmentVariable($k, $vars[$k], "Machine")
+          }
+
+          $x64 = (Get-ChildItem $mesaDir -Directory -Recurse -Filter "x64" | Select-Object -First 1).FullName
+          $bat = @"
+          @echo off
+          if "%~1"=="" (echo Arrastra la carpeta de la app sobre este archivo & pause & exit /b)
+          copy /Y "$x64\opengl32.dll" "%~1\" >nul
+          copy /Y "$x64\libgallium_wgl.dll" "%~1\" >nul
+          copy /Y "$x64\libglapi.dll" "%~1\" >nul
+          echo Mesa3D activado en: %~1
+          pause
+          "@
+          Set-Content -Path "C:\Users\Public\Desktop\Activar-3D-en-app.bat" -Value $bat -Encoding ASCII
+          Write-Host "Mesa3D listo en $x64 (sin tocar System32)" -ForegroundColor Green
+
+      - name: Configure RDP
+        shell: pwsh
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "SecurityLayer" -Value 0 -Force
+          netsh advfirewall firewall delete rule name="RDP-Tailscale" 2>$null
+          netsh advfirewall firewall add rule name="RDP-Tailscale" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service -Name TermService -Force
+
+      - name: Create RDP User
+        shell: pwsh
+        run: |
+          # Generar contraseña aleatoria robusta (20 caracteres)
+          $upper = (65..90) | ForEach-Object { [char]$_ }
+          $lower = (97..122) | ForEach-Object { [char]$_ }
+          $digits = (48..57) | ForEach-Object { [char]$_ }
+          $symbols = @(33,35,36,37,38,42,43,45,61,64,63) | ForEach-Object { [char]$_ }
           
-          $tsStatus = & "C:\Program Files\Tailscale\tailscale.exe" status
-          if ($tsStatus -match "active") {
-            Write-Host "Tailscale status: ACTIVE" -ForegroundColor Green
-          } else {
-            Write-Host "Tailscale status: ERROR - Restarting..." -ForegroundColor Red
-            & "C:\Program Files\Tailscale\tailscale.exe" up --authkey ${{ secrets.TAILSCALE_AUTH_KEY }} --hostname "enigmano-${{ github.run_id }}"
+          # Asegurar al menos uno de cada tipo
+          $password = @(
+            $upper | Get-Random
+            $upper | Get-Random
+            $lower | Get-Random
+            $lower | Get-Random
+            $digits | Get-Random
+            $digits | Get-Random
+            $symbols | Get-Random
+            $symbols | Get-Random
+          )
+          
+          # Completar hasta 20 caracteres aleatorios
+          $allChars = $upper + $lower + $digits + $symbols
+          while ($password.Count -lt 20) {
+            $password += $allChars | Get-Random
           }
           
-          Start-Sleep -Seconds 60
-        }
+          # Mezclar
+          $password = -join ($password | Sort-Object { Get-Random })
+          
+          # MOSTRAR CONTRASEÑA COMPLETA (evitando filtros de GitHub)
+          Write-Host "=========================================="
+          Write-Host "CONTRASEÑA RDP GENERADA:"
+          Write-Host $password
+          Write-Host "=========================================="
+          
+          # También guardar en archivo por si acaso
+          $password | Out-File -FilePath "$env:USERPROFILE\Desktop\rdp_password.txt" -Encoding utf8
+          
+          $secure = ConvertTo-SecureString $password -AsPlainText -Force
+          New-LocalUser -Name "RDP" -Password $secure -AccountNeverExpires -ErrorAction SilentlyContinue | Out-Null
+          Add-LocalGroupMember -Group "Administrators" -Member "RDP" -ErrorAction SilentlyContinue
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP" -ErrorAction SilentlyContinue
+          
+          if (-not (Get-LocalUser -Name "RDP" -ErrorAction SilentlyContinue)) { 
+            Write-Error "User creation failed"
+            exit 1 
+          }
+          
+          "RDP_PASSWORD=$password" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Install Tailscale
+        shell: pwsh
+        run: |
+          $installer = "$env:TEMP\tailscale.msi"
+          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi" -OutFile $installer -UseBasicParsing
+          Start-Process msiexec.exe -ArgumentList "/i","`"$installer`"","/quiet","/norestart" -Wait
+          Remove-Item $installer -Force
+
+      - name: Connect Tailscale
+        shell: pwsh
+        run: |
+          $ts = "$env:ProgramFiles\Tailscale\tailscale.exe"
+          & $ts up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-runner-$env:GITHUB_RUN_ID
+
+          $tsIP = $null; $i = 0
+          while (-not $tsIP -and $i -lt 15) {
+            Start-Sleep -Seconds 4
+            $tsIP = (& $ts ip -4 2>$null | Select-Object -First 1)
+            $i++
+          }
+          if (-not $tsIP) { Write-Error "Tailscale IP not assigned."; exit 1 }
+          "TAILSCALE_IP=$tsIP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Verify
+        shell: pwsh
+        run: |
+          $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User")
+          $test = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
+          if (-not $test.TcpTestSucceeded) { Write-Error "RDP 3389 no accesible"; exit 1 }
+
+          Write-Host "RDP    : OK"
+          Write-Host "Node   : $(node --version)"
+          Write-Host "NPM    : $(npm --version)"
+          Write-Host "Python : $(python --version)"
+          Write-Host "Git    : $(git --version)"
+          Write-Host "OpenCode: $(opencode --version)"
+          Write-Host "Mesa3D : $(Test-Path 'C:\mesa3d')"
+
+      - name: Keep Alive
+        shell: pwsh
+        run: |
+          Write-Host "========== RDP ACCESS =========="
+          Write-Host "IP:       $env:TAILSCALE_IP"
+          Write-Host "User:     RDP"
+          Write-Host "Password: $env:RDP_PASSWORD"
+          Write-Host "3D: Mesa llvmpipe (ejecuta 'Activar-3D-en-app.bat' del escritorio para cada app)"
+          Write-Host "================================"
+          while ($true) { Start-Sleep -Seconds 60 }
